@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+analytics.db
+
+# UI/Build
+output_graphs/
+demo_script.py
+
+# System
+.vscode/
+.idea/
+.DS_Store
+*.log

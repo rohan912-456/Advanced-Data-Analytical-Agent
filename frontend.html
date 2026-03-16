@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>InsightForge AI — Data Analytics Copilot</title>
+    <meta name="description" content="InsightForge AI: Autonomous multi-agent data analytics, ML, and business intelligence." />
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body, #root { height: 100%; }
+        body { background: #080c14; font-family: 'JetBrains Mono', monospace; color: #e2e8f0; overflow: hidden; }
+
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: #0d1420; }
+        ::-webkit-scrollbar-thumb { background: #1e2d45; border-radius: 2px; }
+
+        @keyframes dotPulse   { 0%,100%{opacity:.2;transform:scale(.8)} 50%{opacity:1;transform:scale(1.2)} }
+        @keyframes agentPulse { 0%,100%{opacity:.5} 50%{opacity:1} }
+        @keyframes fadeIn     { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes glow       { 0%,100%{box-shadow:0 0 8px rgba(0,212,170,.2)} 50%{box-shadow:0 0 22px rgba(0,212,170,.55)} }
+        @keyframes spin       { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+        @keyframes slideIn    { from{opacity:0;transform:translateX(-10px)} to{opacity:1;transform:translateX(0)} }
+        @keyframes typeCursor { 0%,100%{opacity:1} 50%{opacity:0} }
+
+        .msg-enter   { animation: fadeIn .35s ease both; }
+        .send-btn:hover:not(:disabled)  { background: #00b894 !important; animation: glow 1s infinite; }
+        .upload-btn:hover { border-color: #3b82f6 !important; color: #3b82f6 !important; }
+        .quick-btn:hover  { background: rgba(0,212,170,.08) !important; border-color: rgba(0,212,170,.4) !important; transform: translateX(3px); }
+        .session-item:hover { background: rgba(59,130,246,.08) !important; }
+        .session-item.active { background: rgba(0,212,170,.08) !important; border-color: rgba(0,212,170,.35) !important; }
+        .export-btn:hover { background: rgba(248,113,113,.15) !important; border-color: #f87171 !important; color: #f87171 !important; }
+        .tool-pill { animation: slideIn .2s ease both; }
+        .typing-cursor { display: inline-block; width: 2px; height: 14px; background: #00d4aa; margin-left: 2px; vertical-align: middle; animation: typeCursor .8s infinite; }
+        textarea:focus, input:focus { outline: none; }
+        .chart-frame { border: none; border-radius: 8px; background: #0d1420; }
+    </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useRef, useEffect, useCallback, useMemo } = React;
+
+// ── Constants ────────────────────────────────────────────────────────────────
+const AGENTS = [
+  { id:"manager",   label:"Manager",       icon:"◈",    color:"#f59e0b", desc:"Orchestrating workflow" },
+  { id:"engineer",  label:"Data Engineer", icon:"⟨/⟩",  color:"#3b82f6", desc:"Processing & cleaning data" },
+  { id:"analyst",   label:"Data Analyst",  icon:"∿",    color:"#8b5cf6", desc:"Analysing patterns & trends" },
+  { id:"scientist", label:"Data Scientist",icon:"∑",    color:"#ec4899", desc:"Running ML & forecasting" },
+  { id:"bi",        label:"BI Analyst",    icon:"⬡",    color:"#00d4aa", desc:"Building visualizations" },
+];
+
+const QUICK_PROMPTS = [
+  { icon:"🔬", label:"Quality Profile",     prompt:"Profile the data quality of my dataset. Check for missing values, duplicates, and outliers. Give me a quality score." },
+  { icon:"📊", label:"Full EDA",            prompt:"Perform a full exploratory data analysis on the uploaded dataset. Include statistical summaries, trend analysis, and key patterns." },
+  { icon:"🤖", label:"ML Clustering",       prompt:"Cluster this dataset into 3–5 meaningful segments using KMeans. Profile each segment and label them." },
+  { icon:"📈", label:"Sales Forecast",      prompt:"Forecast the next 6 periods using the time-series data. Show trend direction and confidence." },
+  { icon:"📋", label:"Consulting Report",   prompt:"Generate a full executive consulting report: Executive Summary, Key Insights, Risk Analysis, and Strategic Recommendations. Export it as a PDF." },
+  { icon:"🌐", label:"Market Research",     prompt:"Search the web for the latest industry trends and competitive landscape related to this dataset's domain." },
+  { icon:"⚗️", label:"Statistical Test",    prompt:"Run statistical hypothesis tests on the key columns. Check for significant differences between groups using t-tests and ANOVA." },
+  { icon:"💰", label:"Revenue Forecast",    prompt:"Build a 12-period revenue forecast. Apply trend modeling and present optimistic / base / pessimistic scenarios." },
+];
+
+const WELCOME_MSG = {
+  role: "assistant",
+  content: `[MANAGER AGENT] InsightForge AI initialized. 16-tool super-agent team is online.
+
+## Welcome to InsightForge AI v2.0
+
+I'm your fully autonomous data analytics copilot — powered by a multi-agent team of specialists:
+
+- **◈ Manager** — Orchestrates your analytics workflow
+- **⟨/⟩ Data Engineer** — Ingestion, cleaning, SQL, PDF & Excel
+- **∿ Data Analyst** — EDA, statistics, hypothesis testing, data quality
+- **∑ Data Scientist** — ML clustering, forecasting, correlation
+- **⬡ BI Analyst** — Interactive charts, dashboards, PDF reports
+
+**New in v2.5 — 16 agent tools available:**
+- 🌐 Web Search (real-time market data)
+- 📄 PDF Reader (extract & analyse documents)
+- 🤖 Advanced ML (KMeans, ARIMA, correlation)
+- 🔬 Data Quality Profiler (auto-score on upload)
+- ⚗️ Statistical Testing (t-test, chi-square, ANOVA)
+- 📋 PDF Report Export (downloadable consulting reports)
+- 📉 What-If Simulation (Scenario modeling)
+- 🗄️ Knowledge RAG (Industry benchmarks)
+- 🎙️ Voice Interaction (STT / TTS)
+- ⚡ Dynamic Dashboard Builder (Interactive BI)
+- 👁️ Visual Intelligence (Multimodal)
+
+**How to get started:**
+1. Upload a CSV dataset — auto-analysis fires instantly
+2. Pick a quick template from the left sidebar
+3. Or just describe your challenge in plain English`,
+  timestamp: Date.now(),
+};
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+const parseCSV = (text) => {
+  const lines = text.trim().split("\n");
+  if (lines.length < 2) return null;
+  const headers = lines[0].split(",").map(h => h.trim().replace(/"/g, ""));
+  const rows = lines.slice(1, 6).map(line => {
+    const vals = line.split(",").map(v => v.trim().replace(/"/g, ""));
+    return headers.reduce((acc, h, i) => ({ ...acc, [h]: vals[i] || "" }), {});
+  });
+  return { headers, rows, totalRows: lines.length - 1 };
+};
+
+// Detect [[CHART:...]] [[PLOTLY:...]] [[REPORT:...]] markers
+const parseMediaMarkers = (text) => {
+  if (!text) return { clean: "", charts: [], plotlys: [], reports: [], dashs: [], pptxs: [] };
+  const charts  = [...text.matchAll(/\[\[CHART:([^\]]+)\]\]/g)].map(m => m[1]);
+  const plotlys = [...text.matchAll(/\[\[PLOTLY:([^\]]+)\]\]/g)].map(m => m[1]);
+  const reports = [...text.matchAll(/\[\[REPORT:([^\]]+)\]\]/g)].map(m => m[1]);
+  const dashs   = [...text.matchAll(/\[\[DASHBOARD:([^\]]+)\]\]/g)].map(m => m[1]);
+  const pptxs   = [...text.matchAll(/\[\[PRESENTATION:([^\]]+)\]\]/g)].map(m => m[1]);
+  const clean   = text.replace(/\[\[(?:CHART|PLOTLY|REPORT|DASHBOARD|PRESENTATION):[^\]]+\]\]/g, "").trim();
+  return { clean, charts, plotlys, reports, dashs, pptxs };
+};
+
+// ── Sub-components ───────────────────────────────────────────────────────────
+const TypingDots = () => (
+  <span style={{ display:"inline-flex", gap:3, alignItems:"center" }}>
+    {[0,1,2].map(i => (
+      <span key={i} style={{
+        width:5, height:5, borderRadius:"50%", background:"#00d4aa",
+        animation:`dotPulse 1.2s ${i*.2}s infinite`, display:"inline-block"
+      }} />
+    ))}
+  </span>
+);
+
+const AgentBadge = ({ text }) => {
+  const match = text.match(/\[(MANAGER AGENT|DATA ENGINEER AGENT|DATA ANALYST AGENT|DATA SCIENTIST AGENT|BI ANALYST AGENT)\]/i);
+  if (!match) return null;
+  const name = match[1].toUpperCase();
+  const map = {
+    "MANAGER AGENT":       { color:"#f59e0b", icon:"◈" },
+    "DATA ENGINEER AGENT": { color:"#3b82f6", icon:"⟨/⟩" },
+    "DATA ANALYST AGENT":  { color:"#8b5cf6", icon:"∿" },
+    "DATA SCIENTIST AGENT":{ color:"#ec4899", icon:"∑" },
+    "BI ANALYST AGENT":    { color:"#00d4aa", icon:"⬡" },
+  };
+  const ag = map[name] || { color:"#64748b", icon:"●" };
+  return (
+    <span style={{
+      display:"inline-flex", alignItems:"center", gap:5,
+      background:ag.color+"18", border:`1px solid ${ag.color}40`,
+      color:ag.color, borderRadius:4, padding:"2px 8px",
+      fontSize:10, fontWeight:700, letterSpacing:"1.5px",
+      marginBottom:6, fontFamily:"monospace"
+    }}>
+      <span>{ag.icon}</span> {name}
+    </span>
+  );
+};
+
+// Rich markdown-like renderer
+const renderLine = (line, i) => {
+  if (!line.trim()) return <div key={i} style={{ height:8 }} />;
+  if (/^\[.+AGENT\]/i.test(line.trim())) return (
+    <div key={i} style={{ margin:"12px 0 4px" }}>
+      <AgentBadge text={line} />
+      <span style={{ color:"#94a3b8", fontSize:13 }}>{line.replace(/\[.+AGENT\]/i,"")}</span>
+    </div>
+  );
+  if (line.startsWith("## ")) return <h3 key={i} style={{ color:"#fff", fontFamily:"'Exo 2',sans-serif", fontSize:15, fontWeight:700, borderBottom:"1px solid #1e2d45", paddingBottom:6, margin:"18px 0 10px", letterSpacing:"-0.3px" }}>{line.replace("## ","")}</h3>;
+  if (line.startsWith("### ")) return <h4 key={i} style={{ color:"#e2e8f0", fontSize:13, fontWeight:600, margin:"12px 0 6px" }}>{line.replace("### ","")}</h4>;
+  if (line.startsWith("**") && line.includes(":**")) {
+    const [bold,...rest] = line.split(":**");
+    return (
+      <p key={i} style={{ margin:"5px 0", fontSize:13, lineHeight:1.6, color:"#cbd5e1" }}>
+        <strong style={{ color:"#00d4aa" }}>{bold.replace(/\*\*/g,"")}:</strong>{rest.join(":**")}
+      </p>
+    );
+  }
+  if (line.match(/^[-•*]\s/)) return (
+    <div key={i} style={{ display:"flex", gap:8, margin:"3px 0", fontSize:13, color:"#cbd5e1", lineHeight:1.6 }}>
+      <span style={{ color:"#00d4aa", flexShrink:0, marginTop:1 }}>▸</span>
+      <span dangerouslySetInnerHTML={{ __html: line.replace(/^[-•*]\s/,"").replace(/\*\*(.+?)\*\*/g,'<strong style="color:#e2e8f0">$1</strong>') }} />
+    </div>
+  );
+  if (line.match(/^\d+\.\s/)) {
+    const num = line.match(/^(\d+)\./)[1];
+    return (
+      <div key={i} style={{ display:"flex", gap:10, margin:"3px 0", fontSize:13, color:"#cbd5e1", lineHeight:1.6 }}>
+        <span style={{ color:"#3b82f6", fontWeight:700, flexShrink:0, width:16 }}>{num}.</span>
+        <span dangerouslySetInnerHTML={{ __html: line.replace(/^\d+\.\s/,"").replace(/\*\*(.+?)\*\*/g,'<strong style="color:#e2e8f0">$1</strong>') }} />
+      </div>
+    );
+  }
+  if (line.match(/^---+$/)) return <hr key={i} style={{ border:"none", borderTop:"1px solid #1e2d45", margin:"12px 0" }} />;
+  if (line.startsWith("|") && line.endsWith("|")) return (
+    <div key={i} style={{ fontFamily:"monospace", fontSize:11, color:"#94a3b8", background:"#0d1420", padding:"2px 8px", borderLeft:"2px solid #1e2d45", whiteSpace:"pre", overflowX:"auto" }}>{line}</div>
+  );
+  return (
+    <p key={i} style={{ margin:"3px 0", fontSize:13, color:"#cbd5e1", lineHeight:1.7 }}
+      dangerouslySetInnerHTML={{ __html: line.replace(/\*\*(.+?)\*\*/g,'<strong style="color:#e2e8f0">$1</strong>').replace(/`([^`]+)`/g,'<code style="background:#0d1420;padding:1px 5px;border-radius:3px;color:#00d4aa;font-size:11px">$1</code>') }}
+    />
+  );
+};
+
+const MessageContent = ({ content, isStreaming }) => {
+  const { clean, charts, plotlys, reports, dashs, pptxs } = parseMediaMarkers(content);
+  const lines = clean.split("\n");
+  return (
+    <div>
+      {lines.map((line, i) => renderLine(line, i))}
+      {isStreaming && <span className="typing-cursor" />}
+
+      {/* Inline static chart images */}
+      {charts.map((fname, i) => (
+        <div key={`chart-${i}`} style={{ margin:"12px 0", borderRadius:8, overflow:"hidden", border:"1px solid #1e2d45" }}>
+          <img src={`/charts/${fname}`} alt={fname} style={{ width:"100%", display:"block" }} />
+        </div>
+      ))}
+
+      {/* Interactive Plotly iframes */}
+      {plotlys.map((fname, i) => (
+        <div key={`plotly-${i}`} style={{ margin:"12px 0", borderRadius:8, overflow:"hidden", border:"1px solid #1e2d45" }}>
+          <div style={{ padding:"6px 12px", background:"#0a0f1a", borderBottom:"1px solid #1e2d45", display:"flex", alignItems:"center", gap:6 }}>
+            <span style={{ color:"#00d4aa", fontSize:11 }}>⬡</span>
+            <span style={{ fontSize:10, color:"#64748b", letterSpacing:"1px" }}>INTERACTIVE CHART</span>
+          </div>
+          <iframe src={`/charts/interactive/${fname}`} className="chart-frame"
+            style={{ width:"100%", height:420, display:"block" }} title={fname} />
+        </div>
+      ))}
+
+      {/* Dashboard Full Preview */}
+      {dashs.map((fname, i) => (
+        <div key={`dash-${i}`} style={{ margin:"12px 0", borderRadius:10, overflow:"hidden", border:"2px solid #00d4aa" }}>
+          <div style={{ padding:"8px 16px", background:"#0a0f1a", borderBottom:"1px solid #1e2d45", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+             <span style={{ fontSize:11, color:"#00d4aa", fontWeight:700 }}>⚡ BI DASHBOARD READY</span>
+             <a href={`/dashboards/${fname}`} target="_blank" style={{ fontSize:10, color:"#3b82f6", textDecoration:"none" }}>Open in New Tab ↗</a>
+          </div>
+          <iframe src={`/dashboards/${fname}`} style={{ width:"100%", height:500, border:"none" }} />
+        </div>
+      ))}
+
+      {/* Report download button */}
+      {reports.map((fname, i) => (
+        <a key={`report-${i}`} href="/api/export-report" download style={{ textDecoration:"none" }}>
+          <div style={{
+            margin:"12px 0", padding:"10px 16px", borderRadius:8, cursor:"pointer",
+            background:"rgba(0,212,170,.08)", border:"1px solid rgba(0,212,170,.3)",
+            display:"flex", alignItems:"center", gap:10
+          }}>
+            <span style={{ fontSize:18 }}>📄</span>
+            <div>
+              <div style={{ fontSize:12, color:"#00d4aa", fontWeight:700 }}>PDF Report Ready</div>
+              <div style={{ fontSize:10, color:"#64748b" }}>{fname} — Click to download</div>
+            </div>
+          </div>
+        </a>
+      ))}
+
+      {/* PPTX download button */}
+      {pptxs.map((fname, i) => (
+        <a key={`pptx-${i}`} href="/api/export-pptx" download style={{ textDecoration:"none" }}>
+          <div style={{
+            margin:"12px 0", padding:"10px 16px", borderRadius:8, cursor:"pointer",
+            background:"rgba(59,130,246,.08)", border:"1px solid rgba(59,130,246,.3)",
+            display:"flex", alignItems:"center", gap:10
+          }}>
+            <span style={{ fontSize:18 }}>📊</span>
+            <div>
+              <div style={{ fontSize:12, color:"#3b82f6", fontWeight:700 }}>PowerPoint Ready</div>
+              <div style={{ fontSize:10, color:"#64748b" }}>{fname} — Click to download</div>
+            </div>
+          </div>
+        </a>
+      ))}
+    </div>
+  );
+};
+
+// EDA summary card shown automatically after file upload
+const EDACard = ({ summary, profile }) => {
+  const [expanded, setExpanded] = useState(false);
+  if (!summary) return null;
+  return (
+    <div style={{ margin:"14px 0", borderRadius:10, border:"1px solid #1e2d45", background:"#0a0f1a", overflow:"hidden", animation:"fadeIn .3s ease" }}>
+      <div style={{ padding:"10px 16px", background:"rgba(59,130,246,.08)", borderBottom:"1px solid #1e2d45", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <span style={{ color:"#3b82f6", fontSize:14 }}>🔬</span>
+          <span style={{ fontFamily:"'Exo 2',sans-serif", fontWeight:700, fontSize:12, color:"#3b82f6" }}>AUTO DATA PROFILE</span>
+        </div>
+        <div style={{ display:"flex", gap:16, fontSize:10, color:"#64748b" }}>
+          <span><b style={{ color:"#e2e8f0" }}>{summary.rows?.toLocaleString()}</b> rows</span>
+          <span><b style={{ color:"#e2e8f0" }}>{summary.cols}</b> columns</span>
+          <span><b style={{ color:"#e2e8f0" }}>{summary.numeric_cols?.length}</b> numeric</span>
+        </div>
+        <button onClick={() => setExpanded(e => !e)} style={{ background:"transparent", border:"1px solid #1e2d45", borderRadius:4, color:"#64748b", cursor:"pointer", padding:"2px 8px", fontSize:10 }}>
+          {expanded ? "▲ Collapse" : "▼ Full Report"}
+        </button>
+      </div>
+      {expanded && (
+        <div style={{ padding:"14px 16px", maxHeight:320, overflowY:"auto" }}>
+          <MessageContent content={profile} isStreaming={false} />
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ── Main Component ────────────────────────────────────────────────────────────
+function InsightForgeAgent() {
+  const [sessions, setSessions]       = useState([{ id:"default", name:"Session 1", created: Date.now() }]);
+  const [activeSession, setActiveSession] = useState("default");
+  const [allMessages, setAllMessages] = useState({ default: [WELCOME_MSG] });
+  const [input, setInput]             = useState("");
+  const [loading, setLoading]         = useState(false);
+  const [streamingId, setStreamingId] = useState(null);
+  const [activeAgent, setActiveAgent] = useState(null);
+  const [attachedFiles, setAttachedFiles]       = useState([]); // { name, content, type }
+  const [imagePreview, setImagePreview]      = useState(null); // base64
+  const [edaData, setEdaData]         = useState(null);
+  const [edaLoading, setEdaLoading]   = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
+
+  const messagesEndRef = useRef(null);
+  const fileInputRef   = useRef(null);
+  const textareaRef    = useRef(null);
+
+  const messages = allMessages[activeSession] || [WELCOME_MSG];
+
+  const setMessages = useCallback((updater) => {
+    setAllMessages(prev => ({
+      ...prev,
+      [activeSession]: typeof updater === "function" ? updater(prev[activeSession] || []) : updater
+    }));
+  }, [activeSession]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior:"smooth" });
+  }, [messages, loading]);
+
+  // ── Session management ─────────────────────────────────────────────────────
+  const createSession = () => {
+    const id   = `session_${Date.now()}`;
+    const name = `Session ${sessions.length + 1}`;
+    setSessions(prev => [...prev, { id, name, created: Date.now() }]);
+    setAllMessages(prev => ({ ...prev, [id]: [{ ...WELCOME_MSG, content: WELCOME_MSG.content }] }));
+    setActiveSession(id);
+    setAttachedFiles([]); setImagePreview(null); setEdaData(null);
+  };
+
+  const switchSession = (id) => {
+    setActiveSession(id);
+    setAttachedFiles([]); setImagePreview(null); setEdaData(null);
+  };
+
+  // ── Agent rotation (visual) ────────────────────────────────────────────────
+  const rotateAgents = useCallback(() => {
+    let idx = 0;
+    const interval = setInterval(() => {
+      setActiveAgent(AGENTS[idx % AGENTS.length]);
+      idx++;
+    }, 800);
+    return interval;
+  }, []);
+
+  // ── File upload + handlers ────────────────────────────────────────────────
+  const handleFileUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+
+    for (const file of files) {
+      const reader = new FileReader();
+      const isImage = file.type.startsWith("image/");
+      
+      reader.onload = async (ev) => {
+        const content = ev.target.result;
+        
+        if (isImage) {
+          setImagePreview(content);
+        } else {
+          setAttachedFiles(prev => [...prev, { filename: file.name, content, type: file.type }]);
+          
+          // Trigger auto EDA / Profile for supported data types
+          const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+          const supportedTypes = [".csv", ".xlsx", ".sql", ".py"];
+          
+          if (supportedTypes.includes(ext)) {
+            setEdaLoading(true);
+            try {
+              const res = await fetch("/api/auto-eda", {
+                method:"POST",
+                headers:{ "Content-Type":"application/json" },
+                body: JSON.stringify({ csv_text: content, filename: file.name })
+              });
+              const data = await res.json();
+              setEdaData({ profile: data.profile, summary: data.summary });
+            } catch {
+              setEdaData(null);
+            } finally {
+              setEdaLoading(false);
+            }
+          }
+        }
+      };
+      
+      if (isImage) reader.readAsDataURL(file);
+      else reader.readAsText(file);
+    }
+    e.target.value = "";
+  };
+
+  // ── Send message with streaming ────────────────────────────────────────────
+  const sendMessage = async (text) => {
+    if (!text.trim() && !attachedFiles.length && !imagePreview) return;
+
+    const msgId = Date.now();
+    setMessages(prev => [
+      ...prev,
+      { role:"user", content: text, timestamp: msgId },
+      { role:"assistant", content:"", timestamp: msgId+1, streaming: true }
+    ]);
+    setInput(""); setLoading(true);
+    const streamId = msgId + 1;
+    setStreamingId(streamId);
+
+    const interval = rotateAgents();
+
+    try {
+      const res = await fetch("/api/chat/stream", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({ 
+          message: text, 
+          session_id: activeSession,
+          image_data: imagePreview,
+          files: attachedFiles.map(f => ({ filename: f.filename, content: f.content }))
+        })
+      });
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let accumulated = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop();
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const payload = JSON.parse(line.slice(6));
+            if (payload.chunk) {
+              accumulated += payload.chunk;
+              setMessages(prev => prev.map(m =>
+                m.timestamp === streamId
+                  ? { ...m, content: m.content + payload.chunk }
+                  : m
+              ));
+            }
+            if (payload.done) {
+              setMessages(prev => prev.map(m =>
+                m.timestamp === streamId ? { ...m, streaming: false } : m
+              ));
+            }
+          } catch {}
+        }
+      }
+    } catch (err) {
+      setMessages(prev => prev.map(m =>
+        m.timestamp === streamId
+          ? { ...m, content:"⚠️ Connection error. Make sure the Python backend is running on port 8000.", streaming: false }
+          : m
+      ));
+    } finally {
+      clearInterval(interval);
+      setActiveAgent(null); setLoading(false); setStreamingId(null);
+      setAttachedFiles([]); setImagePreview(null);
+      
+      // Speak final response directly from accumulation
+      if (accumulated) speak(accumulated);
+    }
+  };
+
+  const handleKey = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(input); }
+  };
+
+  const canSend = !loading && (input.trim() || attachedFiles.length > 0 || imagePreview);
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+  return (
+    <div style={{ display:"flex", height:"100vh", background:"#080c14", overflow:"hidden", position:"relative" }}>
+      {/* Scanline */}
+      <div style={{ position:"fixed", inset:0, pointerEvents:"none", zIndex:0, background:"repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.03) 2px,rgba(0,0,0,.03) 4px)" }} />
+
+      {/* ── SIDEBAR ──────────────────────────────────────────────────────── */}
+      {sidebarOpen && (
+        <div style={{ width:268, background:"#0a0f1a", borderRight:"1px solid #1e2d45", display:"flex", flexDirection:"column", flexShrink:0, zIndex:2 }}>
+
+          {/* Brand */}
+          <div style={{ padding:"18px 16px 14px", borderBottom:"1px solid #1e2d45" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:4 }}>
+              <div style={{ width:34, height:34, borderRadius:8, background:"linear-gradient(135deg,#00d4aa,#3b82f6)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:16 }}>⚡</div>
+              <div>
+                <div style={{ fontFamily:"'Exo 2',sans-serif", fontWeight:800, fontSize:14, color:"#fff", letterSpacing:"-0.3px" }}>InsightForge</div>
+                <div style={{ fontSize:9, color:"#00d4aa", letterSpacing:"2px", textTransform:"uppercase" }}>AI Analytics v2.0</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Sessions */}
+          <div style={{ padding:"12px 16px", borderBottom:"1px solid #1e2d45" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+              <span style={{ fontSize:9, color:"#64748b", letterSpacing:"2px", textTransform:"uppercase" }}>Sessions</span>
+              <button onClick={createSession} style={{ background:"rgba(0,212,170,.1)", border:"1px solid rgba(0,212,170,.3)", borderRadius:4, color:"#00d4aa", cursor:"pointer", padding:"2px 8px", fontSize:9, letterSpacing:"1px" }}>+ NEW</button>
+            </div>
+            <div style={{ maxHeight:100, overflowY:"auto" }}>
+              {sessions.map(s => (
+                <div key={s.id} className={`session-item ${activeSession===s.id?"active":""}`}
+                  onClick={() => switchSession(s.id)}
+                  style={{ display:"flex", alignItems:"center", gap:8, padding:"5px 8px", borderRadius:6, marginBottom:2, cursor:"pointer", border:"1px solid transparent", transition:"all .2s" }}>
+                  <span style={{ color: activeSession===s.id ? "#00d4aa":"#64748b", fontSize:10 }}>◉</span>
+                  <span style={{ fontSize:10, color: activeSession===s.id?"#00d4aa":"#94a3b8", fontFamily:"'Exo 2',sans-serif", fontWeight:600 }}>{s.name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Agent Team Status */}
+          <div style={{ padding:"12px 16px", borderBottom:"1px solid #1e2d45" }}>
+            <div style={{ fontSize:9, color:"#64748b", letterSpacing:"2px", textTransform:"uppercase", marginBottom:8 }}>Agent Team</div>
+            {AGENTS.map(agent => (
+              <div key={agent.id} style={{
+                display:"flex", alignItems:"center", gap:8, padding:"5px 8px",
+                borderRadius:6, marginBottom:2, transition:"all .2s",
+                background: activeAgent?.id===agent.id ? agent.color+"15":"transparent",
+                border:`1px solid ${activeAgent?.id===agent.id ? agent.color+"40":"transparent"}`,
+              }}>
+                <span style={{ color:agent.color, fontSize:12, width:16, textAlign:"center" }}>{agent.icon}</span>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:10, fontWeight:600, color:activeAgent?.id===agent.id?agent.color:"#94a3b8" }}>{agent.label}</div>
+                  {activeAgent?.id===agent.id && (
+                    <div style={{ fontSize:9, color:agent.color, opacity:.7, animation:"agentPulse 1s infinite" }}>{agent.desc}</div>
+                  )}
+                </div>
+                {activeAgent?.id===agent.id && (
+                  <div style={{ width:5, height:5, borderRadius:"50%", background:agent.color, animation:"agentPulse .8s infinite" }} />
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Quick Prompts */}
+          <div style={{ padding:"12px 16px", flex:1, overflowY:"auto" }}>
+            <div style={{ fontSize:9, color:"#64748b", letterSpacing:"2px", textTransform:"uppercase", marginBottom:8 }}>Quick Analysis</div>
+            {QUICK_PROMPTS.map((qp,i) => (
+              <button key={i} className="quick-btn" onClick={() => { setInput(qp.prompt); textareaRef.current?.focus(); }}
+                style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"7px 10px", background:"transparent", border:"1px solid #1e2d45", borderRadius:7, cursor:"pointer", marginBottom:4, textAlign:"left", transition:"all .2s", color:"#94a3b8" }}>
+                <span style={{ fontSize:13 }}>{qp.icon}</span>
+                <span style={{ fontSize:10, fontFamily:"'Exo 2',sans-serif", fontWeight:600 }}>{qp.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Footer stats */}
+          <div style={{ padding:"10px 16px", borderTop:"1px solid #1e2d45" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:"#64748b" }}>
+              <span>Messages</span><span style={{ color:"#00d4aa" }}>{messages.length}</span>
+            </div>
+            <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:"#64748b", marginTop:3 }}>
+              <span>Tools</span><span style={{ color:"#3b82f6" }}>18 active</span>
+            </div>
+            <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:6, fontSize:9, color:"#00d4aa" }}>
+              <span style={{ width:5, height:5, borderRadius:"50%", background:"#00d4aa", display:"inline-block", animation:"agentPulse 2s infinite" }} />
+              <span style={{ letterSpacing:"1px", textTransform:"uppercase" }}>System Online</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MAIN AREA ─────────────────────────────────────────────────────── */}
+      <div style={{ flex:1, display:"flex", flexDirection:"column", position:"relative", zIndex:1, minWidth:0 }}>
+
+        {/* Header bar */}
+        <div style={{ padding:"12px 24px", borderBottom:"1px solid #1e2d45", display:"flex", alignItems:"center", gap:12, background:"#0a0f1a", flexShrink:0 }}>
+          <button onClick={() => setSidebarOpen(o=>!o)} style={{ background:"transparent", border:"1px solid #1e2d45", borderRadius:6, color:"#64748b", cursor:"pointer", padding:"4px 9px", fontSize:12 }}>
+            {sidebarOpen ? "◀" : "▶"}
+          </button>
+          <div style={{ flex:1 }}>
+            <div style={{ fontFamily:"'Exo 2',sans-serif", fontWeight:700, fontSize:13, color:"#ffffff", letterSpacing:"-0.2px" }}>InsightForge AI</div>
+            <div style={{ fontSize:9, color:"#64748b", letterSpacing:"1.5px", textTransform:"uppercase" }}>Autonomous Analytics • {sessions.find(s=>s.id===activeSession)?.name}</div>
+          </div>
+          {/* Export report buttons */}
+          <div style={{ display:"flex", gap:5 }}>
+            <a href="/api/export-report" download style={{ textDecoration:"none" }}>
+              <button className="export-btn" style={{ background:"transparent", border:"1px solid #1e2d45", borderRadius:6, color:"#64748b", cursor:"pointer", padding:"6px 12px", fontSize:10, fontFamily:"'Exo 2',sans-serif", fontWeight:700, letterSpacing:"1px", transition:"all .2s" }}>
+                📄 PDF
+              </button>
+            </a>
+            <a href="/api/export-pptx" download style={{ textDecoration:"none" }}>
+              <button className="export-btn" style={{ background:"transparent", border:"1px solid #1e2d45", borderRadius:6, color:"#64748b", cursor:"pointer", padding:"6px 12px", fontSize:10, fontFamily:"'Exo 2',sans-serif", fontWeight:700, letterSpacing:"1px", transition:"all .2s" }}>
+                📊 PPTX
+              </button>
+            </a>
+          </div>
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <button onClick={() => setVoiceEnabled(v=>!v)} 
+               style={{ background:voiceEnabled?"rgba(0,212,170,.1)":"transparent", border:"1px solid #1e2d45", borderRadius:6, color:voiceEnabled?"#00d4aa":"#64748b", cursor:"pointer", padding:"4px 9px", fontSize:11 }}>
+              {voiceEnabled ? "🔊 Voice ON" : "🔈 Voice OFF"}
+            </button>
+            <div style={{ display:"flex", alignItems:"center", gap:5, fontSize:9, color:"#00d4aa" }}>
+              <span style={{ width:6, height:6, borderRadius:"50%", background:"#00d4aa", display:"inline-block", animation:"agentPulse 2s infinite" }} />
+              <span style={{ letterSpacing:"1px" }}>GEMINI 3.1 FLASH LITE</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Messages */}
+        <div style={{ flex:1, overflowY:"auto", padding:"24px 32px" }}>
+          {messages.map((m, i) => (
+            <div key={i} className="msg-enter" style={{ marginBottom:20, display:"flex", justifyContent:m.role==="user"?"flex-end":"flex-start" }}>
+              {m.role === "assistant" ? (
+                <div style={{ maxWidth:"88%" }}>
+                  <MessageContent content={m.content} isStreaming={!!m.streaming} />
+                </div>
+              ) : (
+                <div style={{ background:"#1e2d45", padding:"11px 16px", borderRadius:10, borderTopRightRadius:2, maxWidth:"78%", boxShadow:"0 4px 14px rgba(0,0,0,.15)", borderLeft:"3px solid #3b82f6" }}>
+                  <div style={{ fontSize:13, color:"#e2e8f0", fontFamily:"'JetBrains Mono',monospace", whiteSpace:"pre-wrap", lineHeight:1.55 }}>{m.content}</div>
+                </div>
+              )}
+            </div>
+          ))}
+
+          {/* Agent working indicator */}
+          {loading && activeAgent && (
+            <div className="msg-enter" style={{ display:"flex", alignItems:"center", gap:10, margin:"16px 0" }}>
+              <div style={{ width:26, height:26, borderRadius:"50%", background:activeAgent.color+"20", border:`1px solid ${activeAgent.color}60`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12 }}>
+                {activeAgent.icon}
+              </div>
+              <div style={{ color:activeAgent.color, fontSize:12, fontWeight:600, fontFamily:"'Exo 2',sans-serif" }}>
+                {activeAgent.label} is working <TypingDots />
+              </div>
+            </div>
+          )}
+          <div ref={messagesEndRef} style={{ height:16 }} />
+        </div>
+
+        {/* EDA card (auto-shown after upload) */}
+        {(edaData || edaLoading) && (
+          <div style={{ padding:"0 32px", flexShrink:0 }}>
+            {edaLoading ? (
+              <div style={{ padding:"10px 14px", background:"rgba(59,130,246,.06)", border:"1px solid #1e2d45", borderRadius:8, marginBottom:6, display:"flex", alignItems:"center", gap:8 }}>
+                <span style={{ fontSize:12, animation:"spin 1s linear infinite", display:"inline-block" }}>⟳</span>
+                <span style={{ fontSize:11, color:"#64748b" }}>Running auto data quality profile…</span>
+              </div>
+            ) : (
+              <EDACard profile={edaData.profile} summary={edaData.summary} />
+            )}
+          </div>
+        )}
+
+        {/* Multi-file & Image Preview */}
+        {(attachedFiles.length > 0 || imagePreview) && (
+          <div style={{ padding:"8px 32px", background:"#0a0f1a", borderTop:"1px solid #1e2d45", display:"flex", flexWrap:"wrap", gap:10, alignItems:"center", flexShrink:0 }}>
+            {imagePreview && (
+              <div style={{ position:"relative", width:60, height:60, borderRadius:6, border:"1px solid #00d4aa", overflow:"hidden" }}>
+                <img src={imagePreview} style={{ width:"100%", height:"100%", objectFit:"cover" }} />
+                <button onClick={() => setImagePreview(null)} style={{ position:"absolute", top:0, right:0, background:"rgba(0,0,0,.5)", border:"none", color:"#fff", fontSize:10, cursor:"pointer", padding:2 }}>✕</button>
+              </div>
+            )}
+            {attachedFiles.map((f, idx) => (
+              <div key={idx} style={{ display:"flex", alignItems:"center", gap:6, background:"rgba(59,130,246,.08)", border:"1px solid rgba(59,130,246,.3)", borderRadius:6, padding:"4px 10px" }}>
+                <span style={{ fontSize:10, color:"#3b82f6", fontWeight:700 }}>📎 {f.filename}</span>
+                <button onClick={() => setAttachedFiles(prev => prev.filter((_,i) => i !== idx))} style={{ background:"transparent", border:"none", color:"#64748b", cursor:"pointer", fontSize:12 }}>✕</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Input */}
+        <div style={{ padding:"0 32px 24px", flexShrink:0 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10, background:"#0d1420", border:"1px solid #1e2d45", borderRadius:12, padding:"10px 14px", boxShadow:"0 8px 32px rgba(0,0,0,.3)", transition:"border-color .2s" }}
+            onFocus={e => e.currentTarget.style.borderColor="#1e3a5f"}
+            onBlur={e  => e.currentTarget.style.borderColor="#1e2d45"}>
+            <input type="file" ref={fileInputRef} onChange={handleFileUpload} style={{ display:"none" }} accept=".csv,.xlsx,.pdf,.sql,.py,.png,.jpg,.jpeg" multiple />
+            <button className="upload-btn" onClick={() => fileInputRef.current?.click()} title="Attach files (CSV, SQL, Python, Images, PDF)"
+              style={{ background:"transparent", border:"1px solid #1e2d45", color:"#64748b", borderRadius:8, width:40, height:40, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", transition:"all .2s", fontSize:17, flexShrink:0 }}>
+              📎
+            </button>
+            <textarea ref={textareaRef} id="chat-input" value={input} onChange={e=>setInput(e.target.value)} onKeyDown={handleKey}
+              placeholder="Describe your analytics challenge…"
+              style={{ flex:1, background:"transparent", border:"none", color:"#fff", fontFamily:"'JetBrains Mono',monospace", fontSize:13, resize:"none", height:44, lineHeight:"24px", paddingTop:10 }}
+            />
+            <button id="send-btn" className="send-btn" onClick={() => sendMessage(input)} disabled={!canSend}
+              style={{ background:canSend?"#00d4aa":"#1e2d45", border:"none", color:canSend?"#000":"#3a4a5c", borderRadius:8, width:44, height:44, display:"flex", alignItems:"center", justifyContent:"center", cursor:canSend?"pointer":"not-allowed", transition:"all .3s", fontWeight:"bold", fontSize:16, flexShrink:0 }}>
+              ➤
+            </button>
+          </div>
+          <div style={{ fontSize:9, color:"#3a4a5c", textAlign:"center", marginTop:5, letterSpacing:"0.5px" }}>
+            InsightForge AI · 18 tools active · Streaming on · Multi-session memory · GEMINI 3.1 FLASH LITE
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+try {
+  const root = ReactDOM.createRoot(document.getElementById("root"));
+  root.render(<InsightForgeAgent />);
+} catch (err) {
+  console.error("InsightForge UI Crash:", err);
+  document.getElementById("root").innerHTML = `<div style="padding:40px; color:#f87171; font-family:monospace;"><h3>Runtime Error</h3><pre>${err.stack || err.message}</pre></div>`;
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+Why Gemini 2.0 Flash is sufficient:---
+1.Speed & Latency: Since we implemented Streaming SSE, you want an engine that starts typing instantly. Flash is built for this.
+
+2. Extensive Context (1M+ Tokens): This is your biggest advantage. As a Data Analyst, you often deal with "messy" context (large CSV samples, long SQL schemas, or long PDF reports). Flash can "read" all of that without losing its place.
+
+3. Tool Calling Accuracy: We registered 12 different tools (KMeans, ANOVA, SQL, etc.). Flash models are specifically optimized to be "routers"—they are very good at deciding exactly which tool to call based on your prompt.
+
+4. Multimodality: Since you'll be generating charts, the 2.0 series is excellent at "seeing" data patterns if you ever decide to feed images back into the agent for a second opinion.
+
+IF WANTED TO UPDRADE API KEY:---
+Yes! If you ever want to upgrade to a "Pro" model for more complex reasoning, you can simply change line 29 in 
+
+agent/analytics_agent.py:
+
+In python file:
+
+# CURRENT
+model="gemini-1.5-flash"
+
+# OPTIONS FOR UPGRADE
+model="gemini-1.5-pro"   # Higher intelligence, lower quota
+
+model="gemini-2.0-flash" # Next-gen speed (requires higher API tier)
+
+The rest of the code is generic, so it will work with any model in the Gemini family.
